@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import argparse
+import sys
 from typing import Dict, List, Tuple, Set, Optional, NoReturn
 from dataclasses import dataclass
 
@@ -636,30 +638,21 @@ class Parser:
         return assembled
 
 
-program: str = """
-%some_pragma
-aaa:
-inc r0
- bar:; ...
-add r0 ; add r0 to acc
-foo: sub r1
-fim p3 foo
-%let fuck = 123
-jun bar
-jun bar
-"""
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Assemble Intel 4004 assembly")
+    parser.add_argument("infile", type=argparse.FileType("r"))
+    parser.add_argument(
+        "outfile", nargs="?", type=argparse.FileType("wb"), default="a.out"
+    )
+    return parser.parse_args()
 
-parser = Parser("program.s")
-stmts = parser.split_statements(program)
-for stmt in stmts:
-    print(stmt)
 
-print(parser.assign_label_addresses(stmts))
+def main() -> None:
+    args = parse_args()
+    parser = Parser(args.infile.name)
+    assembled = parser.assemble(args.infile.read())
+    args.outfile.write(assembled)
 
-for c in parser.assemble("isz r14 0xde"):
-    print(c, hex(c), bin(c))
 
-print("-" * 40)
-
-for c in parser.assemble(program):
-    print(hex(c))
+if __name__ == "__main__":
+    main()
