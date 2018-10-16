@@ -25,6 +25,7 @@ OPCODES_MAP = {
     "wrm": 0b1110,
     "wmp": 0b1110,
     "wrr": 0b1110,
+    "wpm": 0b1110,
     "wr0": 0b1110,
     "wr1": 0b1110,
     "wr2": 0b1110,
@@ -73,6 +74,7 @@ INSN_BYTE_LENGTHS = {
     "wrm": 1,
     "wmp": 1,
     "wrr": 1,
+    "wpm": 1,
     "wr0": 1,
     "wr1": 1,
     "wr2": 1,
@@ -635,7 +637,10 @@ class Parser:
         for stmt in stmts:
             assembled += self.assemble_stmt(stmt, variables)
 
-        return assembled
+        if len(assembled) > 4096:
+            self.report_error("ROM too large!")
+
+        return assembled.ljust(4096, b"\x00")
 
 
 def parse_args() -> argparse.Namespace:
