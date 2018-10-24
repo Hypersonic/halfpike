@@ -2,6 +2,8 @@
 
 import argparse
 import sys
+import struct
+from ast import literal_eval
 from typing import Dict, List, Tuple, Set, Optional, NoReturn
 from dataclasses import dataclass
 
@@ -197,10 +199,18 @@ class CodeStmt:
     insn: Optional[CodeInsn] = None
 
     def assembled_byte_length(self) -> int:
-        if self.kind != "insn":
-            return 0
-        assert self.insn, "Missing insn!"
-        return INSN_BYTE_LENGTHS[self.insn.opcode]
+        if self.kind == "insn":
+            assert self.insn, "Missing insn!"
+            return INSN_BYTE_LENGTHS[self.insn.opcode]
+
+        if self.kind == "pragma":
+            # string pragmas have length of str+1 (to account for the nullbyte)
+            if self.stmt.startswith("str "):
+                return len(literal_eval(self.stmt[len("str ") :])) + 1
+            # bytes are always 1-long (duh)
+            if self.stmt.startswith("byte "):
+                return 1
+        return 0
 
 
 class Parser:
@@ -214,6 +224,11 @@ class Parser:
 
     def report_error(self, stmt: CodeStmt, error: str) -> NoReturn:
         self.report_error_simple(stmt.line_num, stmt.stmt, error)
+
+    def report_warning(self, stmt: CodeStmt, warning: str):
+        print(
+            f"Warning in file {self.filename}, line {stmt.line_num}: {warning}: {stmt.stmt!r}"
+        )
 
     def get_arg1(self, stmt: CodeStmt) -> str:
         """
@@ -399,7 +414,9 @@ class Parser:
         op = OPCODES_MAP[stmt.insn.opcode]
         return bytes([combine_func(op)])
 
-    def assemble_insn(self, stmt: CodeStmt, variables: Dict[str, str]) -> bytes:
+    def assemble_insn(
+        self, stmt: CodeStmt, variables: Dict[str, str], ip: int
+    ) -> bytes:
         if stmt.kind != "insn":
             return b""
 
@@ -523,6 +540,11 @@ class Parser:
             # TODO: make sure label is on the same page as the instruction,
             #       otherwise this will be BUGGY!!
             target = self.parse_insn_argument(stmt, self.get_arg2(stmt), variables)
+            if ip & 0xf00 != target & 0xf00:
+                self.report_warning(
+                    stmt,
+                    "Target IP and current IP are on different pages, which is probably not the behavior you expect!",
+                )
             target &= 0xff
             return bytes([(op << 4) | flags, target])
 
@@ -537,6 +559,11 @@ class Parser:
             # TODO: make sure label is on the same page as the instruction,
             #       otherwise this will be BUGGY!!
             target = self.parse_insn_argument(stmt, self.get_arg2(stmt), variables)
+            if ip & 0xf00 != target & 0xf00:
+                self.report_warning(
+                    stmt,
+                    "Target IP and current IP are on different pages, which is probably not the behavior you expect!",
+                )
             target &= 0xff
             return bytes([(op << 4) | reg, target])
 
@@ -611,13 +638,18 @@ class Parser:
 
         self.report_error(stmt, "Do not know how to assemble")
 
-    def assemble_stmt(self, stmt: CodeStmt, variables: Dict[str, str]) -> bytes:
+    def assemble_stmt(
+        self, stmt: CodeStmt, variables: Dict[str, str], ip: int
+    ) -> bytes:
         if stmt.kind == "label":
             return b""
         elif stmt.kind == "insn":
-            return self.assemble_insn(stmt, variables)
+            return self.assemble_insn(stmt, variables, ip)
         elif stmt.kind == "pragma":
-            # TODO: data pragmas
+            if stmt.stmt.startswith("str "):
+                return literal_eval(stmt.stmt[len("str ") :]).encode("ascii") + b"\x00"
+            if stmt.stmt.startswith("byte "):
+                return struct.pack("B", literal_eval(stmt.stmt[len("byte ") :]))
             return b""
 
         self.report_error(
@@ -634,8 +666,10 @@ class Parser:
             variables[k] = str(v)
 
         assembled = b""
+        ip = 0
         for stmt in stmts:
-            assembled += self.assemble_stmt(stmt, variables)
+            assembled += self.assemble_stmt(stmt, variables, ip)
+            ip += stmt.assembled_byte_length()
 
         if len(assembled) > 4096:
             self.report_error("ROM too large!")
