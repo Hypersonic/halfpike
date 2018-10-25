@@ -130,6 +130,7 @@ struct Machine_State {
                                     0, 0, 0, 0, 0, 0, 0, 0};
   uint4_t acc{0};
   uint4_t carry_bit{0};
+  uint8_t src_reg{0}; // the register set by the SRC instruction
 
   std::array<uint8_t, 4096> rom{};
   std::array<std::array<uint4_t, 256>, 8> ram_banks{};
@@ -244,19 +245,19 @@ Opcode get_current_opcode(Machine_State &state) {
       return Opcode::WR3;
     case 0b0111:
       return Opcode::SBM;
-    case 0b1000:
-      return Opcode::RDM;
     case 0b1001:
-      return Opcode::RDR;
+      return Opcode::RDM;
     case 0b1010:
-      return Opcode::ADM;
+      return Opcode::RDR;
     case 0b1011:
-      return Opcode::RD0;
+      return Opcode::ADM;
     case 0b1100:
-      return Opcode::RD1;
+      return Opcode::RD0;
     case 0b1101:
-      return Opcode::RD2;
+      return Opcode::RD1;
     case 0b1110:
+      return Opcode::RD2;
+    case 0b1111:
       return Opcode::RD3;
     }
   case 0b1111:
@@ -336,9 +337,11 @@ std::string get_opcode_name(const Opcode opcode) {
 }
 
 void dump_machine_state(Machine_State &state) {
+  std::cout << "pc: " << state.pc << ", ";
   for (size_t i = 0; i < state.registers.size(); i++) {
     std::cout << 'r' << i << ": " << state.registers.at(i) << ", ";
   }
+  std::cout << "src: " << int(state.src_reg) << ", ";
   std::cout << "carry: " << state.carry_bit << ", ";
   std::cout << "acc: " << state.acc << std::endl;
 }
@@ -387,22 +390,41 @@ void tick(Machine_State &state) {
              const auto data = state.rom.at((decode_pc + 1).get());
              set_register_pair(state, register_pair_idx, data);
            }},
-          {Opcode::SRC, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::FIN, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::JIN, [decode_pc](Machine_State &state) { abort(); }},
+          {Opcode::SRC,
+           [decode_pc](Machine_State &state) {
+             const auto register_pair_idx =
+                 (state.rom.at(decode_pc.get()) & 0b00001110) >> 1;
+             state.src_reg =
+                 (state.registers[2 * register_pair_idx].get() << 4) |
+                 (state.registers[2 * register_pair_idx + 1].get());
+           }},
+          {Opcode::FIN,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: FIN" << std::endl;
+             abort();
+           }},
+          {Opcode::JIN,
+           [decode_pc](Machine_State &state) {
+             const auto register_pair_idx =
+                 (state.rom.at(decode_pc.get()) & 0b00001110) >> 1;
+             const uint8_t low_portion =
+                 (state.registers[2 * register_pair_idx].get() << 4) |
+                 (state.registers[2 * register_pair_idx + 1].get());
+             state.pc = (state.pc & 0xf00) | low_portion;
+           }},
           {Opcode::JUN,
            [decode_pc](Machine_State &state) {
              // Jump unconditional
-             const auto target = uint12_t{
-                 uint16_t(state.rom.at(decode_pc.get()) & 0xf << 8) |
-                 uint16_t(state.rom.at((decode_pc + uint12_t{1}).get()))};
+             const auto target =
+                 uint12_t{(uint16_t(state.rom.at(decode_pc.get())) & 0xf) << 8 |
+                          uint16_t(state.rom.at((decode_pc + 1).get()))};
              state.pc = target;
            }},
           {Opcode::JMS,
            [decode_pc](Machine_State &state) {
-             const auto target = uint12_t{
-                 uint16_t(state.rom.at(decode_pc.get()) & 0xf << 8) |
-                 uint16_t(state.rom.at((decode_pc + uint12_t{1}).get()))};
+             const auto target =
+                 uint12_t{(uint16_t(state.rom.at(decode_pc.get())) & 0xf) << 8 |
+                          uint16_t(state.rom.at((decode_pc + 1).get()))};
              state.curr_callstack_offset =
                  (state.curr_callstack_offset + 1) % 3;
              state.callstack[state.curr_callstack_offset] = state.pc;
@@ -413,7 +435,11 @@ void tick(Machine_State &state) {
              const auto reg_number = state.rom.at(decode_pc.get()) & 0xf;
              state.registers[reg_number]++;
            }},
-          {Opcode::ISZ, [decode_pc](Machine_State &state) { abort(); }},
+          {Opcode::ISZ,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: ISZ" << std::endl;
+             abort();
+           }},
           {Opcode::ADD,
            [decode_pc](Machine_State &state) {
              const auto reg_num = state.rom.at(decode_pc.get()) & 0xf;
@@ -422,8 +448,16 @@ void tick(Machine_State &state) {
              state.acc += reg;
              state.carry_bit = will_carry;
            }},
-          {Opcode::SUB, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::LD, [decode_pc](Machine_State &state) { abort(); }},
+          {Opcode::SUB,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: SUB" << std::endl;
+             abort();
+           }},
+          {Opcode::LD,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: LD" << std::endl;
+             abort();
+           }},
           {Opcode::XCH,
            [decode_pc](Machine_State &state) {
              const auto reg_number = state.rom.at(decode_pc.get()) & 0xf;
@@ -444,24 +478,93 @@ void tick(Machine_State &state) {
            [decode_pc](Machine_State &state) {
              state.acc = uint4_t{state.rom.at(decode_pc.get()) & 0xf};
            }},
-          {Opcode::WRM, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::WMP, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::WRR, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::WPM, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::WR0, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::WR1, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::WR2, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::WR3, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::SBM, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::RDM, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::RDR, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::ADM, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::RD0, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::RD1, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::RD2, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::RD3, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::CLB, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::CLC, [decode_pc](Machine_State &state) { abort(); }},
+          {Opcode::WRM,
+           [decode_pc](Machine_State &state) {
+             state.ram_banks[state.selected_ram_bank][state.src_reg] =
+                 state.acc;
+           }},
+          {Opcode::WMP,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: FIN" << std::endl;
+             abort();
+           }},
+          {Opcode::WRR,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: WRR" << std::endl;
+             abort();
+           }},
+          {Opcode::WPM,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: WPM" << std::endl;
+             abort();
+           }},
+          {Opcode::WR0,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: WR0" << std::endl;
+             abort();
+           }},
+          {Opcode::WR1,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: WR1" << std::endl;
+             abort();
+           }},
+          {Opcode::WR2,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: WR2" << std::endl;
+             abort();
+           }},
+          {Opcode::WR3,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: WR3" << std::endl;
+             abort();
+           }},
+          {Opcode::SBM,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: SBM" << std::endl;
+             abort();
+           }},
+          {Opcode::RDM,
+           [decode_pc](Machine_State &state) {
+             state.acc =
+                 state.ram_banks[state.selected_ram_bank][state.src_reg];
+           }},
+          {Opcode::RDR,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: RDR" << std::endl;
+             abort();
+           }},
+          {Opcode::ADM,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: ADM" << std::endl;
+             abort();
+           }},
+          {Opcode::RD0,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: RD0" << std::endl;
+             abort();
+           }},
+          {Opcode::RD1,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: RD1" << std::endl;
+             abort();
+           }},
+          {Opcode::RD2,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: RD2" << std::endl;
+             abort();
+           }},
+          {Opcode::RD3,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: RD3" << std::endl;
+             abort();
+           }},
+          {Opcode::CLB,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: CLB" << std::endl;
+             abort();
+           }},
+          {Opcode::CLC,
+           [decode_pc](Machine_State &state) { state.carry_bit = 0; }},
           {Opcode::IAC,
            [decode_pc](Machine_State &state) {
              state.acc++;
@@ -471,8 +574,16 @@ void tick(Machine_State &state) {
                state.carry_bit = 0;
              }
            }},
-          {Opcode::CMC, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::CMA, [decode_pc](Machine_State &state) { abort(); }},
+          {Opcode::CMC,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: CMC" << std::endl;
+             abort();
+           }},
+          {Opcode::CMA,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: CMA" << std::endl;
+             abort();
+           }},
           {Opcode::RAL,
            [decode_pc](Machine_State &state) {
              const auto old_acc = state.acc;
@@ -487,13 +598,41 @@ void tick(Machine_State &state) {
              state.acc = (old_acc >> 1) | (old_carry << 3);
              state.carry_bit = old_acc & 0b1;
            }},
-          {Opcode::TCC, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::DAC, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::TCS, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::STC, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::DAA, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::KBP, [decode_pc](Machine_State &state) { abort(); }},
-          {Opcode::DCL, [decode_pc](Machine_State &state) { abort(); }},
+          {Opcode::TCC,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: TCC" << std::endl;
+             abort();
+           }},
+          {Opcode::DAC,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: DAC" << std::endl;
+             abort();
+           }},
+          {Opcode::TCS,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: TCS" << std::endl;
+             abort();
+           }},
+          {Opcode::STC,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: STC" << std::endl;
+             abort();
+           }},
+          {Opcode::DAA,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: DAA" << std::endl;
+             abort();
+           }},
+          {Opcode::KBP,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: KBP" << std::endl;
+             abort();
+           }},
+          {Opcode::DCL,
+           [decode_pc](Machine_State &state) {
+             std::cout << "unimpl: DCL" << std::endl;
+             abort();
+           }},
       };
   auto opcode = get_current_opcode(state);
   state.pc += get_opcode_size(opcode);

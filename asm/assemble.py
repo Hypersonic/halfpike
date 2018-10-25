@@ -198,7 +198,7 @@ class CodeStmt:
     stmt: str
     insn: Optional[CodeInsn] = None
 
-    def assembled_byte_length(self) -> int:
+    def assembled_byte_length(self, ip: int) -> int:
         if self.kind == "insn":
             assert self.insn, "Missing insn!"
             return INSN_BYTE_LENGTHS[self.insn.opcode]
@@ -210,6 +210,13 @@ class CodeStmt:
             # bytes are always 1-long (duh)
             if self.stmt.startswith("byte "):
                 return 1
+            # align pragmas align to 256 byte boundaries
+            if self.stmt.startswith("pagealign"):
+                # if we're already page aligned, do nothing
+                if ip & 0xf00 == ip:
+                    return 0
+                next_page = (ip & 0xf00) + 0x100
+                return next_page - ip
         return 0
 
 
@@ -352,7 +359,7 @@ class Parser:
                 if stmt.stmt in label_addresses:
                     self.report_error(stmt, "Duplicate label!")
                 label_addresses[stmt.stmt] = ip
-            ip += stmt.assembled_byte_length()
+            ip += stmt.assembled_byte_length(ip)
         return label_addresses
 
     def assign_variables(self, stmts: List[CodeStmt]) -> Dict[str, str]:
@@ -369,7 +376,7 @@ class Parser:
                 if lhs in variables:
                     self.report_error(stmt, "Duplicate variable!")
                 variables[lhs] = rhs
-            ip += stmt.assembled_byte_length()
+            ip += stmt.assembled_byte_length(ip)
         return variables
 
     def parse_insn_argument(
@@ -650,6 +657,9 @@ class Parser:
                 return literal_eval(stmt.stmt[len("str ") :]).encode("ascii") + b"\x00"
             if stmt.stmt.startswith("byte "):
                 return struct.pack("B", literal_eval(stmt.stmt[len("byte ") :]))
+            if stmt.stmt.startswith("pagealign"):
+                next_page = (ip & 0xf00) + 0x100
+                return b"\x00" * (next_page - ip)
             return b""
 
         self.report_error(
@@ -668,11 +678,18 @@ class Parser:
         assembled = b""
         ip = 0
         for stmt in stmts:
-            assembled += self.assemble_stmt(stmt, variables, ip)
-            ip += stmt.assembled_byte_length()
+            asm = self.assemble_stmt(stmt, variables, ip)
+            length = stmt.assembled_byte_length(ip)
+            if len(asm) != length:
+                self.report_error(
+                    stmt,
+                    f"Mismatch in actual assembled length ({len(asm)}) and predicted assembled length ({length})",
+                )
+            assembled += asm
+            ip += length
 
         if len(assembled) > 4096:
-            self.report_error("ROM too large!")
+            self.report_error(stmts[0], "ROM too large!")
 
         return assembled.ljust(4096, b"\x00")
 
