@@ -105,7 +105,7 @@ INSN_BYTE_LENGTHS = {
     "dcl": 1,
 }
 
-REGULAR_REGISTERS = {
+REGULAR_REGISTERS = [
     "r0",
     "r1",
     "r2",
@@ -115,16 +115,16 @@ REGULAR_REGISTERS = {
     "r6",
     "r7",
     "r8",
-    "r8",
+    "r9",
     "r10",
     "r11",
     "r12",
     "r13",
     "r14",
     "r15",
-}
+]
 
-PAIR_REGISTERS = {
+PAIR_REGISTERS = [
     "p0",
     "p1",
     "p2",
@@ -141,7 +141,7 @@ PAIR_REGISTERS = {
     "r10|r11",
     "r12|r13",
     "r14|r15",
-}
+]
 
 # numbers for registers (and registerpairs)
 REGISTER_NUMBERS = {
@@ -155,7 +155,7 @@ REGISTER_NUMBERS = {
     "r6": 6,
     "r7": 7,
     "r8": 8,
-    "r8": 9,
+    "r9": 9,
     "r10": 10,
     "r11": 11,
     "r12": 12,
@@ -691,6 +691,7 @@ class Parser:
         if len(assembled) > 4096:
             self.report_error(stmts[0], "ROM too large!")
 
+        print(f"ROM is {len(assembled) / 4096 * 100:.2f}% full")
         return assembled.ljust(4096, b"\x00")
 
 

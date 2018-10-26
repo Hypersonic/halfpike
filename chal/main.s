@@ -1,5 +1,8 @@
 jun main
-hlt0: jun hlt0
+
+init_handler: jun init_handler
+; end init_handler
+
 hlt1: jun hlt1
 hlt2: jun hlt2
 hlt3: jun hlt3
@@ -8,10 +11,13 @@ hlt5: jun hlt5
 hlt6: jun hlt6
 hlt7: jun hlt7
 
-
-
-
 main:
+jun swtch
+; end main
+
+hlt: jun hlt
+
+swtch:
 ; dispatch to the appropriate state handler
 ; load the current state to r0
 clc
@@ -23,6 +29,93 @@ ral
 fim p0 0
 xch r1
 jun state_dispatch
+; end swtch
+
+; memcpy between RAM pages
+; p0 = dst page addr
+; p1 = src page addr
+; r4 = dst page number
+; r5 = src page number
+; p3 = num_bytes
+; Leaves you on dst page
+; clobbers acc, input registers (p0, p1, p2, p3), p4
+; no return values
+ram_memcpy:
+ram_memcpy__loop:
+
+; low byte of acc = 0?
+ram_memcpy__loop__check_low:
+ld r7
+jcn a ram_memcpy_loop__check_high
+jun ram_memcpy__loop__copy
+; high bytes of acc = 0?
+ram_memcpy_loop__check_high:
+ld r6
+jcn a ram_memcpy__loop__copy
+; hi and low both = 0? then we're done
+jun ram_memcpy__done
+
+ram_memcpy__loop__copy:
+; switch to src page
+xch r5
+dcl
+xch r5
+; grab src value
+src p1
+rdm
+; switch to dst page
+xch r4
+dcl
+xch r4
+src p0
+wrm
+
+; decrement low. If low was 0, also decrement high.
+fim p4 1 ; we'll use this to decrement
+ram_memcpy__loop__dec_low:
+clc
+ld r7
+sub r9
+xch r7
+jcn nc ram_memcpy__loop ; if we didn't set the carry, on to the next loop
+ram_memcpy__loop__dec_high:
+clc
+ld r6
+sub r9
+xch r6
+jcn c ram_memcpy__done ; if we set the carry, we hit 0! yay! we're done!
+
+; inc src
+ram_memcpy__loop__inc_src_low:
+ld r3
+iac 
+xch r3
+jcn nc ram_memcpy__loop__after_inc_src
+ram_memcpy__loop__inc_src_high:
+ld r2
+iac
+xch r2
+ram_memcpy__loop__after_inc_src:
+
+; inc dst
+ram_memcpy__loop__inc_dst_low:
+ld r1
+iac 
+xch r1
+jcn nc ram_memcpy__loop__after_inc_dst
+ram_memcpy__loop__inc_dst_high:
+ld r0
+iac
+xch r0
+ram_memcpy__loop__after_inc_dst:
+
+jun ram_memcpy__loop
+
+ram_memcpy__done:
+bbl 0
+; end ram_memcpy
+
+
 
 %pagealign
 ; jump to the correct entry in the dispatch table
@@ -32,21 +125,34 @@ jun state_dispatch
 ; the same page as us, it dispatches to one of these.
 ; these must all, obviously, be 2-bytes long, preferably juns
 state_dispatch_table:
-dispatch_entry_0:  jun hlt0
-dispatch_entry_1:  jun hlt1
-dispatch_entry_2:  jun hlt2
-dispatch_entry_3:  jun hlt3
-dispatch_entry_4:  jun hlt4
-dispatch_entry_5:  jun hlt5
-dispatch_entry_6:  jun hlt6
-dispatch_entry_7:  jun hlt7
+dispatch_entry_0:  jun init_handler ; STATE_INIT
+dispatch_entry_1:  jun hlt1 ; STATE_BAR
+dispatch_entry_2:  jun hlt2 ; STATE_BAZ
+dispatch_entry_3:  jun hlt3 ; STATE_BAT
+dispatch_entry_4:  jun hlt4 ; STATE_BET
+dispatch_entry_5:  jun hlt5 ; STATE_BOT
+dispatch_entry_6:  jun hlt6 ; STATE_FIZ
+dispatch_entry_7:  jun hlt7 ; STATE_FUZ
 ; dispatch to the appropriate jump table 
 state_dispatch: jin p0
 
 
+; ======= DATA TYPES =======
+; enum STATE
+%let STATE_INIT = 0
+%let STATE_BAR = 1
+%let STATE_BAZ = 2
+%let STATE_BAT = 3
+%let STATE_BET = 4
+%let STATE_BOT = 5
+%let STATE_FIZ = 6
+%let STATE_FUZ = 7
+
+
+
 ; ======= MEMORY LAYOUT ======= 
 ; Each RAM bank looks roughly the same. Here's space to assign all locations:
-; 0     = state (valid values = 0 to 8, inclusive)
+; 0     = state (valid values = 0 to 7, inclusive)
 %let state = 0
 ; 1     = 
 ; 2     = 
