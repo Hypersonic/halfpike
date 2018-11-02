@@ -209,7 +209,7 @@ class CodeStmt:
                 return len(literal_eval(self.stmt[len("str ") :])) + 1
             # bytes are always 1-long (duh)
             if self.stmt.startswith("byte "):
-                return 1
+                return len([x for x in self.stmt.split(" ") if x][1:])
             # align pragmas align to 256 byte boundaries
             if self.stmt.startswith("pagealign"):
                 # if we're already page aligned, do nothing
@@ -312,6 +312,7 @@ class Parser:
         """
         stmts = []
         for line_num, line in enumerate(code.splitlines()):
+            line_num += 1  # lines aren't 0-indexed :P
             # remove comments, whitespace
             # only insert nonblank lines
             line = line.split(";")[0]
@@ -509,6 +510,12 @@ class Parser:
                 )
             reg = REGISTER_NUMBERS[arg]
             data = self.parse_insn_argument(stmt, arg2, variables)
+            if data > 255:
+                self.report_warning(
+                    stmt,
+                    f"data for fim instruction is larger than a page-size, and will be truncated (data = {data})",
+                )
+            data &= 0xff
             return bytes([(op << 4) | (reg << 1), data])
 
         if insn.opcode == "ldm":
@@ -656,8 +663,14 @@ class Parser:
             if stmt.stmt.startswith("str "):
                 return literal_eval(stmt.stmt[len("str ") :]).encode("ascii") + b"\x00"
             if stmt.stmt.startswith("byte "):
-                return struct.pack("B", literal_eval(stmt.stmt[len("byte ") :]))
+                bz = [x for x in stmt.stmt.split(" ") if x][1:]
+                out = b""
+                for b in bz:
+                    out += struct.pack("B", literal_eval(b))
+                return out
             if stmt.stmt.startswith("pagealign"):
+                if ip & 0xf00 == ip:
+                    return b""  # already page aligned
                 next_page = (ip & 0xf00) + 0x100
                 return b"\x00" * (next_page - ip)
             return b""

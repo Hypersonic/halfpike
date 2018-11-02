@@ -337,13 +337,23 @@ std::string get_opcode_name(const Opcode opcode) {
 }
 
 void dump_machine_state(Machine_State &state) {
-  std::cout << "pc: " << state.pc << ", ";
+  // std::cout << std::hex << std::showbase;
+
+  std::cout << "pc: " << std::hex << std::showbase << state.pc << ", ";
   for (size_t i = 0; i < state.registers.size(); i++) {
-    std::cout << 'r' << i << ": " << state.registers.at(i) << ", ";
+    std::cout << 'r' << std::dec << i << ": " << std::hex << std::showbase
+              << state.registers.at(i) << ", ";
   }
-  std::cout << "src: " << int(state.src_reg) << ", ";
-  std::cout << "carry: " << state.carry_bit << ", ";
-  std::cout << "acc: " << state.acc << std::endl;
+  std::cout << "src: " << std::hex << std::showbase << int(state.src_reg)
+            << ", ";
+
+  std::cout << "bank: " << std::hex << std::showbase
+            << int(state.selected_ram_bank) << ", ";
+
+  std::cout << "carry: " << std::hex << std::showbase << state.carry_bit
+            << ", ";
+  std::cout << "acc: " << std::hex << std::showbase << state.acc << ", ";
+  std::cout << std::endl;
 }
 
 void set_register_pair(Machine_State &state, uint8_t pair_idx, uint8_t value) {
@@ -400,8 +410,15 @@ void tick(Machine_State &state) {
            }},
           {Opcode::FIN,
            [decode_pc](Machine_State &state) {
-             std::cout << "unimpl: FIN" << std::endl;
-             abort();
+             const auto register_pair_idx =
+                 (state.rom.at(decode_pc.get()) & 0b00001110) >> 1;
+             const uint12_t pc_high = (state.pc & 0xf00) >> 8;
+             const uint12_t high_reg = uint12_t{state.registers[0].get()};
+             const uint12_t low_reg = uint12_t{state.registers[1].get()};
+             const uint12_t target =
+                 (pc_high << 8) | (high_reg << 4) | (low_reg);
+             const auto value = state.rom.at(target.get());
+             set_register_pair(state, register_pair_idx, value);
            }},
           {Opcode::JIN,
            [decode_pc](Machine_State &state) {
@@ -437,8 +454,13 @@ void tick(Machine_State &state) {
            }},
           {Opcode::ISZ,
            [decode_pc](Machine_State &state) {
-             std::cout << "unimpl: ISZ" << std::endl;
-             abort();
+             const auto register_idx = state.rom.at(decode_pc.get()) & 0b1111;
+             const auto target =
+                 (state.pc & 0xf00) | state.rom.at((decode_pc + 1).get());
+             state.registers[register_idx]++;
+             if (state.registers[register_idx] == 0) {
+               state.pc = target;
+             }
            }},
           {Opcode::ADD,
            [decode_pc](Machine_State &state) {
@@ -450,13 +472,19 @@ void tick(Machine_State &state) {
            }},
           {Opcode::SUB,
            [decode_pc](Machine_State &state) {
-             std::cout << "unimpl: SUB" << std::endl;
-             abort();
+             const auto reg_num = state.rom.at(decode_pc.get()) & 0xf;
+             // we do the subtract in full-width by adding complements of the
+             // reg and state, then grab the bits we want from the result
+             const auto result_full = state.acc.get() +
+                                      ~state.registers[reg_num].get() +
+                                      (~state.carry_bit.get() & 0b1);
+             state.carry_bit = (result_full & 0x10) >> 4;
+             state.acc = result_full & 0xf;
            }},
           {Opcode::LD,
            [decode_pc](Machine_State &state) {
-             std::cout << "unimpl: LD" << std::endl;
-             abort();
+             const auto reg_num = state.rom.at(decode_pc.get()) & 0xf;
+             state.acc = state.registers[reg_num];
            }},
           {Opcode::XCH,
            [decode_pc](Machine_State &state) {
@@ -630,8 +658,8 @@ void tick(Machine_State &state) {
            }},
           {Opcode::DCL,
            [decode_pc](Machine_State &state) {
-             std::cout << "unimpl: DCL" << std::endl;
-             abort();
+             const auto bank_num = state.acc & 0b0111;
+             state.selected_ram_bank = size_t(bank_num.get());
            }},
       };
   auto opcode = get_current_opcode(state);
@@ -639,6 +667,13 @@ void tick(Machine_State &state) {
   opcode_handlers.at(opcode)(state);
   std::cout << decode_pc << ": " << get_opcode_name(opcode) << std::endl;
   dump_machine_state(state);
+  if (opcode == Opcode::BBL) {
+    // dump memory on BBL to test memcpy
+    for (size_t i = 0; i < 64; i++) {
+      std::cout << i << ':' << state.ram_banks.at(0).at(i) << std::endl;
+    }
+    abort();
+  }
 }
 
 int main(int argc, char **argv) {

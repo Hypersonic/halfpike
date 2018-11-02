@@ -1,8 +1,13 @@
+; vvv debug vvv
+fim p0 program_1 ; warning expected on this :)
+jms copy_program_1
+
+jun hlt
+; ^^^ debug ^^^
+
 jun main
 
-init_handler: jun init_handler
-; end init_handler
-
+hlt0: jun hlt0
 hlt1: jun hlt1
 hlt2: jun hlt2
 hlt3: jun hlt3
@@ -18,17 +23,17 @@ jun swtch
 hlt: jun hlt
 
 swtch:
-; dispatch to the appropriate state handler
+; dispatch to the appropriate opcode handler
 ; load the current state to r0
 clc
-fim p0 state
+fim p0 vm_pc
 src p0
 rdm
 ; acc *= 2
 ral
 fim p0 0
 xch r1
-jun state_dispatch
+jun opcode_dispatch
 ; end swtch
 
 ; memcpy between RAM pages
@@ -51,9 +56,8 @@ jun ram_memcpy__loop__copy
 ; high bytes of acc = 0?
 ram_memcpy_loop__check_high:
 ld r6
-jcn a ram_memcpy__loop__copy
 ; hi and low both = 0? then we're done
-jun ram_memcpy__done
+jcn a ram_memcpy__done
 
 ram_memcpy__loop__copy:
 ; switch to src page
@@ -77,7 +81,7 @@ clc
 ld r7
 sub r9
 xch r7
-jcn nc ram_memcpy__loop ; if we didn't set the carry, on to the next loop
+jcn nc ram_memcpy__inc ; if we didn't set the carry, continue to the increments
 ram_memcpy__loop__dec_high:
 clc
 ld r6
@@ -85,6 +89,7 @@ sub r9
 xch r6
 jcn c ram_memcpy__done ; if we set the carry, we hit 0! yay! we're done!
 
+ram_memcpy__inc:
 ; inc src
 ram_memcpy__loop__inc_src_low:
 ld r3
@@ -116,6 +121,205 @@ bbl 0
 ; end ram_memcpy
 
 
+%pagealign
+program_1:
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+program_2:
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+program_3:
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+program_4:
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+
+; copy a program, starting at p0 in ROM, into the current bank's bytecode buffer
+; This is valid for programs 1 to 4 (for programs 5 to 8, use copy_program_2)
+; src = p0
+; clobbers p0, p1, p2, acc
+; pseudocode:
+; dst = bytecode_start
+; repeat twice {
+;   cnt = 0
+;   do {
+;     a,b = *src;
+;     *dst = a;
+;     dst++;
+;     *dst = b;
+;     dst++;
+;     src++;
+;   } while (++cnt != 0);
+; }
+copy_program_1:
+; dst = bytecode_start
+fim p1 bytecode_start
+
+; vvv rep 1 vvv
+; cnt = 0
+fim p3 0
+copy_program_1__loop_1:
+; cnt = 0
+; do {
+; a, b = *src
+fin p2 ; now r4 = a, r5 = b
+; *dst = a
+src p1 
+ld r4
+wrm
+; dst++
+xch r3
+iac
+xch r3
+jcn nc copy_program_1__loop_1__inc_dst_1__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r2
+iac
+xch r2
+copy_program_1__loop_1__inc_dst_1__after:
+; *dst = b
+src p1
+ld r5
+wrm
+; dst++ 
+xch r3
+iac
+xch r3
+jcn nc copy_program_1__loop_1__inc_dst_2__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r2
+iac
+xch r2
+copy_program_1__loop_1__inc_dst_2__after:
+; src++
+xch r1
+iac
+xch r1
+jcn nc copy_program_1__loop_1__inc_src__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r0
+iac
+xch r0
+copy_program_1__loop_1__inc_src__after:
+; while (++cnt != 0);
+isz r6 copy_program_1__loop_1__end
+jun copy_program_1__loop_1
+copy_program_1__loop_1__end:
+; ^^^ rep 1 ^^^
+
+; vvv rep 2 vvv
+; cnt = 0
+fim p3 0
+copy_program_1__loop_2:
+; cnt = 0
+; do {
+; a, b = *src
+fin p2 ; now r4 = a, r5 = b
+; *dst = a
+src p1 
+ld r4
+wrm
+; dst++
+xch r3
+iac
+xch r3
+jcn nc copy_program_1__loop_2__inc_dst_1__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r2
+iac
+xch r2
+copy_program_1__loop_2__inc_dst_1__after:
+; *dst = b
+src p1
+ld r5
+wrm
+; dst++ 
+xch r3
+iac
+xch r3
+jcn nc copy_program_1__loop_2__inc_dst_2__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r2
+iac
+xch r2
+copy_program_1__loop_2__inc_dst_2__after:
+; src++
+xch r1
+iac
+xch r1
+jcn nc copy_program_1__loop_2__inc_src__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r0
+iac
+xch r0
+copy_program_1__loop_2__inc_src__after:
+; while (++cnt != 0);
+isz r6 copy_program_1__loop_2__end
+jun copy_program_1__loop_2
+copy_program_1__loop_2__end:
+; ^^^ rep 2 ^^^
+
+
+bbl 0
+; end copy_program_1
+
 
 %pagealign
 ; jump to the correct entry in the dispatch table
@@ -124,99 +328,36 @@ bbl 0
 ; addressing on the 4004 is -- because the jin below (`state_dispatch`) is on
 ; the same page as us, it dispatches to one of these.
 ; these must all, obviously, be 2-bytes long, preferably juns
-state_dispatch_table:
-dispatch_entry_0:  jun init_handler ; STATE_INIT
-dispatch_entry_1:  jun hlt1 ; STATE_BAR
-dispatch_entry_2:  jun hlt2 ; STATE_BAZ
-dispatch_entry_3:  jun hlt3 ; STATE_BAT
-dispatch_entry_4:  jun hlt4 ; STATE_BET
-dispatch_entry_5:  jun hlt5 ; STATE_BOT
-dispatch_entry_6:  jun hlt6 ; STATE_FIZ
-dispatch_entry_7:  jun hlt7 ; STATE_FUZ
+opcode_dispatch_table:
+dispatch_entry_0:  jun hlt0 ; 
+dispatch_entry_1:  jun hlt1 ;
+dispatch_entry_2:  jun hlt2 ;
+dispatch_entry_3:  jun hlt3 ;
+dispatch_entry_4:  jun hlt4 ;
+dispatch_entry_5:  jun hlt5 ;
+dispatch_entry_6:  jun hlt6 ;
+dispatch_entry_7:  jun hlt7 ;
 ; dispatch to the appropriate jump table 
-state_dispatch: jin p0
+opcode_dispatch: jin p0
 
 
 ; ======= DATA TYPES =======
-; enum STATE
-%let STATE_INIT = 0
-%let STATE_BAR = 1
-%let STATE_BAZ = 2
-%let STATE_BAT = 3
-%let STATE_BET = 4
-%let STATE_BOT = 5
-%let STATE_FIZ = 6
-%let STATE_FUZ = 7
-
+; enum OPCODE
+%let OPCODE_FAIL = 0
+%let OPCODE_ROL = 1
+%let OPCODE_LD = 2
+%let OPCODE_XORI = 3
+%let OPCODE_STRI = 4
+%let OPCODE_RST = 5
+%let OPCODE_LDM = 6
+%let OPCODE_ADD = 7
 
 
 ; ======= MEMORY LAYOUT ======= 
 ; Each RAM bank looks roughly the same. Here's space to assign all locations:
-; 0     = state (valid values = 0 to 7, inclusive)
-%let state = 0
-; 1     = 
-; 2     = 
-; 3     = 
-; 4     = 
-; 5     = 
-; 6     = 
-; 7     = 
-; 8     = 
-; 9     = 
-; 10    = 
-; 11    = 
-; 12    = 
-; 13    = 
-; 14    = 
-; 15    = 
-; 16    = 
-; 17    = 
-; 18    = 
-; 19    = 
-; 20    = 
-; 21    = 
-; 22    = 
-; 23    = 
-; 24    = 
-; 25    = 
-; 26    = 
-; 27    = 
-; 28    = 
-; 29    = 
-; 30    = 
-; 31    = 
-; 32    = 
-; 33    = 
-; 34    = 
-; 35    = 
-; 36    = 
-; 37    = 
-; 38    = 
-; 39    = 
-; 40    = 
-; 41    = 
-; 42    = 
-; 43    = 
-; 44    = 
-; 45    = 
-; 46    = 
-; 47    = 
-; 48    = 
-; 49    = 
-; 50    = 
-; 51    = 
-; 52    = 
-; 53    = 
-; 54    = 
-; 55    = 
-; 56    = 
-; 57    = 
-; 58    = 
-; 59    = 
-; 60    = 
-; 61    = 
-; 62    = 
-; 63    = 
+%let bytecode_start = 0 ; important that this is page aligned
+; all things in this range are bytecode
+%let bytecode_end = 63
 ; 64    = 
 ; 65    = 
 ; 66    = 
@@ -327,23 +468,23 @@ state_dispatch: jin p0
 ; 171   = 
 ; 172   = 
 ; 173   = 
-; 174   = 
-; 175   = 
-; 176   = 
-; 177   = 
-; 178   = 
-; 179   = 
-; 180   = 
-; 181   = 
-; 182   = 
-; 183   = 
-; 184   = 
-; 185   = 
-; 186   = 
-; 187   = 
-; 188   = 
-; 189   = 
-; 190   = 
+%let vm_pc = 174
+%let vm_r0 = 175
+%let vm_r1 = 176
+%let vm_r2 = 177
+%let vm_r3 = 178
+%let vm_r4 = 179
+%let vm_r5 = 180
+%let vm_r6 = 181
+%let vm_r7 = 182
+%let vm_r8 = 183
+%let vm_r9 = 184
+%let vm_r10 = 185
+%let vm_r11 = 186
+%let vm_r12 = 187
+%let vm_r13 = 188
+%let vm_r14 = 189
+%let vm_r15 = 190
 ; 191   = 
 ; 192   = 
 ; 193   = 
