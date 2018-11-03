@@ -667,13 +667,6 @@ void tick(Machine_State &state) {
   opcode_handlers.at(opcode)(state);
   std::cout << decode_pc << ": " << get_opcode_name(opcode) << std::endl;
   dump_machine_state(state);
-  if (opcode == Opcode::BBL) {
-    // dump memory on BBL to test memcpy
-    for (size_t i = 0; i < 64; i++) {
-      std::cout << i << ':' << state.ram_banks.at(0).at(i) << std::endl;
-    }
-    abort();
-  }
 }
 
 int main(int argc, char **argv) {

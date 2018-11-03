@@ -1,10 +1,3 @@
-; vvv debug vvv
-fim p0 program_1 ; warning expected on this :)
-jms copy_program_1
-
-jun hlt
-; ^^^ debug ^^^
-
 jun main
 
 hlt0: jun hlt0
@@ -17,16 +10,79 @@ hlt6: jun hlt6
 hlt7: jun hlt7
 
 main:
-jun swtch
-; end main
+; load all programs into memory:
+; program 1 (bank 0)
+ldm 0
+dcl
+fim p0 program_1
+jms copy_program_1
+; program 2 (bank 1)
+ldm 1
+dcl
+fim p0 program_2
+jms copy_program_1
+; program 3 (bank 2)
+ldm 2
+dcl
+fim p0 program_3
+jms copy_program_1
+; program 4 (bank 3)
+ldm 3
+dcl
+fim p0 program_4
+jms copy_program_1
+; program 5 (bank 4)
+ldm 4
+dcl
+fim p0 program_5
+jms copy_program_2
+; program 6 (bank 5)
+ldm 5
+dcl
+fim p0 program_6
+jms copy_program_2
+; program 7 (bank 6)
+ldm 6
+dcl
+fim p0 program_7
+jms copy_program_2
+; program 8 (bank 7)
+ldm 7
+dcl
+fim p0 program_8
+jms copy_program_2
 
-hlt: jun hlt
+; TODO: load all program registers with flag and data nibbles
 
+; switch back to bank 0
+ldm 0
+dcl
+
+; fallthru to swtch
 swtch:
 ; dispatch to the appropriate opcode handler
 ; load the current state to r0
 clc
 fim p0 vm_pc
+src p0
+rdm
+; now we have the pc in acc. Let's get the opcode by multiplying by 4.
+; we don't need to add a base, because we base the bytecode at RAM addr 0
+; shift p0 left by 2
+fim p0 0 ; clear p0
+clc      ; and carry
+ral
+xch r1
+ral
+xch r0
+ld r1
+ral
+xch r1
+xch r0
+ral
+xch r0
+; now it's left shifted by 4.
+; now we load the value at that address
 src p0
 rdm
 ; acc *= 2
@@ -123,22 +179,22 @@ bbl 0
 
 %pagealign
 program_1:
-%byte 0x01 0x23
+%byte 0x31 0x23
 %byte 0x45 0x67
 %byte 0x89 0xab
 %byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
+%byte 0xde 0xad
+%byte 0xbe 0xef
+%byte 0xc0 0xde
+%byte 0xfa 0xce
+%byte 0xca 0xfe
+%byte 0xba 0xbe
+%byte 0xf0 0x0d
+%byte 0xfa 0xce
+%byte 0xc0 0xc1
+%byte 0xc2 0xc3
+%byte 0xc4 0xc5
+%byte 0xc6 0xc7
 program_2:
 %byte 0x01 0x23
 %byte 0x45 0x67
@@ -319,6 +375,206 @@ copy_program_1__loop_2__end:
 
 bbl 0
 ; end copy_program_1
+
+
+%pagealign
+program_5:
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0xde 0xad
+%byte 0xbe 0xef
+%byte 0xc0 0xde
+%byte 0xfa 0xce
+%byte 0xca 0xfe
+%byte 0xba 0xbe
+%byte 0xf0 0x0d
+%byte 0xfa 0xce
+%byte 0xc0 0xc1
+%byte 0xc2 0xc3
+%byte 0xc4 0xc5
+%byte 0xc6 0xc7
+program_6:
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+program_7:
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+program_8:
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+%byte 0x01 0x23
+%byte 0x45 0x67
+%byte 0x89 0xab
+%byte 0xcd 0xef
+
+; copy a program, starting at p0 in ROM, into the current bank's bytecode buffer
+; This is valid for programs 1 to 4 (for programs 5 to 8, use copy_program_2)
+; src = p0
+; clobbers p0, p1, p2, acc
+; pseudocode:
+; dst = bytecode_start
+; repeat twice {
+;   cnt = 0
+;   do {
+;     a,b = *src;
+;     *dst = a;
+;     dst++;
+;     *dst = b;
+;     dst++;
+;     src++;
+;   } while (++cnt != 0);
+; }
+copy_program_2:
+; dst = bytecode_start
+fim p1 bytecode_start
+
+; vvv rep 1 vvv
+; cnt = 0
+fim p3 0
+copy_program_2__loop_1:
+; cnt = 0
+; do {
+; a, b = *src
+fin p2 ; now r4 = a, r5 = b
+; *dst = a
+src p1 
+ld r4
+wrm
+; dst++
+xch r3
+iac
+xch r3
+jcn nc copy_program_2__loop_1__inc_dst_1__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r2
+iac
+xch r2
+copy_program_2__loop_1__inc_dst_1__after:
+; *dst = b
+src p1
+ld r5
+wrm
+; dst++ 
+xch r3
+iac
+xch r3
+jcn nc copy_program_2__loop_1__inc_dst_2__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r2
+iac
+xch r2
+copy_program_2__loop_1__inc_dst_2__after:
+; src++
+xch r1
+iac
+xch r1
+jcn nc copy_program_2__loop_1__inc_src__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r0
+iac
+xch r0
+copy_program_2__loop_1__inc_src__after:
+; while (++cnt != 0);
+isz r6 copy_program_2__loop_1__end
+jun copy_program_2__loop_1
+copy_program_2__loop_1__end:
+; ^^^ rep 1 ^^^
+
+; vvv rep 2 vvv
+; cnt = 0
+fim p3 0
+copy_program_2__loop_2:
+; cnt = 0
+; do {
+; a, b = *src
+fin p2 ; now r4 = a, r5 = b
+; *dst = a
+src p1 
+ld r4
+wrm
+; dst++
+xch r3
+iac
+xch r3
+jcn nc copy_program_2__loop_2__inc_dst_1__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r2
+iac
+xch r2
+copy_program_2__loop_2__inc_dst_1__after:
+; *dst = b
+src p1
+ld r5
+wrm
+; dst++ 
+xch r3
+iac
+xch r3
+jcn nc copy_program_2__loop_2__inc_dst_2__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r2
+iac
+xch r2
+copy_program_2__loop_2__inc_dst_2__after:
+; src++
+xch r1
+iac
+xch r1
+jcn nc copy_program_2__loop_2__inc_src__after ; no carry, just go to the next
+; ugh, we had a carry, let's increment high
+xch r0
+iac
+xch r0
+copy_program_2__loop_2__inc_src__after:
+; while (++cnt != 0);
+isz r6 copy_program_2__loop_2__end
+jun copy_program_2__loop_2
+copy_program_2__loop_2__end:
+; ^^^ rep 2 ^^^
+
+
+bbl 0
+; end copy_program_2
 
 
 %pagealign
