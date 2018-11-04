@@ -1,13 +1,83 @@
 jun main
+hlt: jun hlt
 
-hlt0: jun hlt0
-hlt1: jun hlt1
-hlt2: jun hlt2
-hlt3: jun hlt3
-hlt4: jun hlt4
-hlt5: jun hlt5
-hlt6: jun hlt6
-hlt7: jun hlt7
+; each of these opcode handlers should run exactly one instruction, then jump
+; back to main_loop
+; Before this handler was called, the 4 nibbles of the instruction were loaded into
+; r9, r10, r11, and r12, respectively.
+
+
+;fail r1, r2, imm:
+;    if r1 == r2:
+;        FAILED ||= imm
+;        READY_TO_STOP = true
+handle_opcode_fail:
+; get first reg value
+ld r10
+jms load_vm_register
+xch r0
+xch r10
+; get second reg value
+ld r11
+jms load_vm_register
+xch r0
+xch r11
+; if r1 == r2
+ld r10
+sub r11
+jcn na handle_opcode_fail__done
+  ; FAILED ||= imm
+  fim p0 vm_failed
+  src p0
+  rdm
+  jcn na handle_opcode_fail__after_or
+  ldm 1
+  wrm
+  handle_opcode_fail__after_or:
+  ; READY_TO_STOP = true
+  fim p0 vm_ready_to_stop
+  src p0
+  ldm 1
+  wrm
+handle_opcode_fail__done:
+jun main_loop
+; end handle_opcode_fail
+
+
+;rol r1, imm
+handle_opcode_rol: jun hlt
+
+handle_opcode_ld: jun hlt
+
+handle_opcode_xori: jun hlt
+
+handle_opcode_stri: jun hlt
+
+; rst
+;  ip = 0
+handle_opcode_rst: 
+fim p0 vm_pc
+src p0
+ldm 0
+wrm
+jun main_loop
+; end handle_opcode_rst
+
+handle_opcode_ldm: jun hlt
+
+handle_opcode_add: jun hlt
+
+
+; Load vm register number (stored in acc) into r0
+load_vm_register:
+fim p0 vm_r0
+xch r0
+src p0
+rdm
+xch r0
+bbl 0
+; end load_vm_register
+
 
 main:
 ; load all programs into memory:
@@ -58,8 +128,18 @@ jms copy_program_2
 ldm 0
 dcl
 
+;fallthru to main_loop
+main_loop:
+; check if we're done
+jms all_states_done
+jcn na finished
+
 ; fallthru to swtch
 swtch:
+; switch to the next ram bank
+ld r15
+dcl
+inc r15
 ; dispatch to the appropriate opcode handler
 ; load the current state to r0
 clc
@@ -83,14 +163,44 @@ ral
 xch r0
 ; now it's left shifted by 4.
 ; now we load the value at that address
+; load opcode -> r9
 src p0
 rdm
-; acc *= 2
+xch r9
+; load arg1 -> r10
+inc r1
+src p0
+rdm
+xch r10
+; load arg2 -> r11
+inc r1
+src p0
+rdm
+xch r11
+; load arg3 -> r12
+inc r1
+src p0
+rdm
+xch r12
+; increment pc
+fim p0 vm_pc
+src p0
+rdm
+iac
+wrm
+; opcode *= 2
+ld r9
 ral
 fim p0 0
 xch r1
 jun opcode_dispatch
 ; end swtch
+
+finished:
+; for now, just spin
+; TODO: print a message depending on whether they got it right or wrong
+hhh: jun hhh
+; end finished
 
 ; memcpy between RAM pages
 ; p0 = dst page addr
@@ -177,75 +287,103 @@ bbl 0
 ; end ram_memcpy
 
 
+; check if all states are in the "done" state.
+; clobbers p0, p1
+; sets acc to whether we're done or not. (0 if we're not, 1 if we are)
+all_states_done:
+fim p1 0x8_0 ; r3 = current bank, r2 = constant 8 we'll use for subtracting
+
+all_state_done__loop:
+; switch banks
+ld r3
+dcl
+; grab the value
+fim p0 vm_ready_to_stop
+src p0
+rdm
+; if our acc is 0, return a 0
+jcn na all_state_done__check
+bbl 0
+all_state_done__check:
+; advance
+inc r3
+ld r3
+sub r2
+jcn na all_state_done__loop ; if r3 != 8, loop again
+; hey, we didn't early return! guess we're done running c:
+bbl 1
+; end all_states_done
+
+
 %pagealign
 program_1:
-%byte 0x31 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0xde 0xad
-%byte 0xbe 0xef
-%byte 0xc0 0xde
-%byte 0xfa 0xce
-%byte 0xca 0xfe
-%byte 0xba 0xbe
-%byte 0xf0 0x0d
-%byte 0xfa 0xce
-%byte 0xc0 0xc1
-%byte 0xc2 0xc3
-%byte 0xc4 0xc5
-%byte 0xc6 0xc7
+%byte 0x00 0x61 ; fail r0, r6, 1
+%byte 0x01 0x71 ; fail r1, r7, 1
+%byte 0x02 0x81 ; fail r2, r8, 1
+%byte 0x03 0x91 ; fail r3, r9, 1
+%byte 0x04 0xa1 ; fail r4, r10, 1
+%byte 0x05 0xb1 ; fail r5, r11, 1
+%byte 0x50 0x00 ; rst
+%byte 0x00 0x00
+%byte 0x00 0x00
+%byte 0x00 0x00
+%byte 0x00 0x00
+%byte 0x00 0x00
+%byte 0x00 0x00
+%byte 0x00 0x00
+%byte 0x00 0x00
+%byte 0x00 0x00
 program_2:
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
+%byte 0x00 0x01
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
 program_3:
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
+%byte 0x00 0x01
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
 program_4:
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
+%byte 0x00 0x01
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
 
 ; copy a program, starting at p0 in ROM, into the current bank's bytecode buffer
 ; This is valid for programs 1 to 4 (for programs 5 to 8, use copy_program_2)
@@ -379,73 +517,73 @@ bbl 0
 
 %pagealign
 program_5:
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0xde 0xad
-%byte 0xbe 0xef
-%byte 0xc0 0xde
-%byte 0xfa 0xce
-%byte 0xca 0xfe
-%byte 0xba 0xbe
-%byte 0xf0 0x0d
-%byte 0xfa 0xce
-%byte 0xc0 0xc1
-%byte 0xc2 0xc3
-%byte 0xc4 0xc5
-%byte 0xc6 0xc7
+%byte 0x00 0x01
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
 program_6:
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
+%byte 0x00 0x01
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
 program_7:
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
+%byte 0x00 0x01
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
 program_8:
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
-%byte 0x01 0x23
-%byte 0x45 0x67
-%byte 0x89 0xab
-%byte 0xcd 0xef
+%byte 0x00 0x01
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
+%byte 0x50 0x00
 
 ; copy a program, starting at p0 in ROM, into the current bank's bytecode buffer
 ; This is valid for programs 1 to 4 (for programs 5 to 8, use copy_program_2)
@@ -585,14 +723,14 @@ bbl 0
 ; the same page as us, it dispatches to one of these.
 ; these must all, obviously, be 2-bytes long, preferably juns
 opcode_dispatch_table:
-dispatch_entry_0:  jun hlt0 ; 
-dispatch_entry_1:  jun hlt1 ;
-dispatch_entry_2:  jun hlt2 ;
-dispatch_entry_3:  jun hlt3 ;
-dispatch_entry_4:  jun hlt4 ;
-dispatch_entry_5:  jun hlt5 ;
-dispatch_entry_6:  jun hlt6 ;
-dispatch_entry_7:  jun hlt7 ;
+dispatch_entry_0:  jun handle_opcode_fail
+dispatch_entry_1:  jun handle_opcode_rol
+dispatch_entry_2:  jun handle_opcode_ld
+dispatch_entry_3:  jun handle_opcode_xori
+dispatch_entry_4:  jun handle_opcode_stri
+dispatch_entry_5:  jun handle_opcode_rst
+dispatch_entry_6:  jun handle_opcode_ldm
+dispatch_entry_7:  jun handle_opcode_add
 ; dispatch to the appropriate jump table 
 opcode_dispatch: jin p0
 
@@ -707,40 +845,40 @@ opcode_dispatch: jin p0
 ; 154   = 
 ; 155   = 
 ; 156   = 
-; 157   = 
-; 158   = 
-; 159   = 
-; 160   = 
-; 161   = 
-; 162   = 
-; 163   = 
-; 164   = 
-; 165   = 
-; 166   = 
-; 167   = 
-; 168   = 
-; 169   = 
-; 170   = 
-; 171   = 
-; 172   = 
-; 173   = 
-%let vm_pc = 174
-%let vm_r0 = 175
-%let vm_r1 = 176
-%let vm_r2 = 177
-%let vm_r3 = 178
-%let vm_r4 = 179
-%let vm_r5 = 180
-%let vm_r6 = 181
-%let vm_r7 = 182
-%let vm_r8 = 183
-%let vm_r9 = 184
-%let vm_r10 = 185
-%let vm_r11 = 186
-%let vm_r12 = 187
-%let vm_r13 = 188
-%let vm_r14 = 189
-%let vm_r15 = 190
+%let vm_failed = 157 ; boolean indicating whether we've "failed"
+%let vm_ready_to_stop = 158 ; boolean indicating whether we're this vm has become "done"
+%let vm_pc = 159
+%let vm_r0 = 160 ; importantly, the low nibbles of this is 0, so we can just add the register number
+%let vm_r1 = 161
+%let vm_r2 = 162
+%let vm_r3 = 163
+%let vm_r4 = 164
+%let vm_r5 = 165
+%let vm_r6 = 166
+%let vm_r7 = 167
+%let vm_r8 = 168
+%let vm_r9 = 169
+%let vm_r10 = 170
+%let vm_r11 = 171
+%let vm_r12 = 172
+%let vm_r13 = 173
+%let vm_r14 = 174
+%let vm_r15 = 175
+; 176   = 
+; 177   = 
+; 178   = 
+; 179   = 
+; 180   = 
+; 181   = 
+; 182   = 
+; 183   = 
+; 184   = 
+; 185   = 
+; 186   = 
+; 187   = 
+; 188   = 
+; 189   = 
+; 190   = 
 ; 191   = 
 ; 192   = 
 ; 193   = 

@@ -353,6 +353,9 @@ void dump_machine_state(Machine_State &state) {
   std::cout << "carry: " << std::hex << std::showbase << state.carry_bit
             << ", ";
   std::cout << "acc: " << std::hex << std::showbase << state.acc << ", ";
+  for (size_t i = 0; i < 8; i++) {
+    std::cout << "stop[" << i << "]: " << state.ram_banks.at(i).at(158) << ", ";
+  }
   std::cout << std::endl;
 }
 
