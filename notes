@@ -30,7 +30,7 @@ Each set is processed in a small vm:
 operations are encoded as op|a|b|c, each a nibble
 opcodes:
 0: fail r1, r2, imm
-    if r1 == r2:
+    if r1 != r2:
         FAILED ||= imm
         READY_TO_STOP = true
 1: rol r1, imm

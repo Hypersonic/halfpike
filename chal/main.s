@@ -23,10 +23,10 @@ ld r11
 jms load_vm_register
 xch r0
 xch r11
-; if r1 == r2
+; if r1 != r2
 ld r10
 sub r11
-jcn na handle_opcode_fail__done
+jcn a handle_opcode_fail__done
   ; if imm == 1
   ld r12
   jcn a handle_opcode_fail__after_or
@@ -56,7 +56,29 @@ handle_opcode_rol: jun hlt
 
 handle_opcode_ld: jun hlt
 
-handle_opcode_xori: jun hlt
+; xor r1, imm
+handle_opcode_xori: 
+; store reg number in r6
+ld r10
+xch r6
+; get reg value
+ld r10
+jms load_vm_register
+xch r0
+xch r10
+; get the two values into r0, r1, then call xor
+ld r10
+xch r0
+ld r11
+xch r1
+jms xor
+; now r0 holds the xored values, let's store it back in the register...
+; leave the value in r0, put the register in r1, call store.
+ld r6
+xch r1
+jms store_vm_register
+jun main_loop
+; end handle_opcode_xori
 
 handle_opcode_stri: jun hlt
 
@@ -84,6 +106,17 @@ rdm
 xch r0
 bbl 0
 ; end load_vm_register
+
+; write the vm register number (stored in r1) with the value in r0
+store_vm_register:
+fim p1 vm_r0
+ld r1
+xch r3
+src p1
+ld r0
+wrm
+bbl 0
+; end store_vm_register
 
 
 main:
@@ -232,6 +265,7 @@ jun opcode_dispatch
 
 finished:
 jms check_all_correct
+;asdf: jun asdf
 jcn na yay_they_got_it
 
 oh_no_they_didnt_get_it:
@@ -374,8 +408,8 @@ check_all_correct__loop:
   fim p0 vm_failed
   src p0
   rdm
-  ; if our acc is 1, it means we've failed this thread. therefore, we can return a 0
-  jcn na check_all_correct__check
+  ; if our acc is 1, it means we've failed this vm. therefore, we can return a 0
+  jcn a check_all_correct__check
     bbl 0
   check_all_correct__check:
   ; advance to the next bank
@@ -383,12 +417,19 @@ check_all_correct__loop:
   ld r3
   sub r2
 jcn na check_all_correct__loop ; if r3 != 8, loop again
+; nothing failed? we're all right! return 1
 bbl 1
 ; end check_all_correct
 
 %pagealign
 program_1:
-%byte 0x00 0x01 ; fail r0, r0, 1
+%byte 0x00 0x61 ; fail r0, r6, 1
+%byte 0x01 0x71 ; fail r1, r7, 1
+%byte 0x02 0x81 ; fail r2, r8, 1
+%byte 0x03 0x91 ; fail r3, r9, 1
+%byte 0x04 0xa1 ; fail r4, r10, 1
+%byte 0x05 0xb1 ; fail r5, r11, 1
+%byte 0x00 0xf0 ; fail r0, r15, 0 (actually fail)
 %byte 0x50 0x00 ; rst
 %byte 0x00 0x00
 %byte 0x00 0x00
@@ -397,31 +438,26 @@ program_1:
 %byte 0x00 0x00
 %byte 0x00 0x00
 %byte 0x00 0x00
-%byte 0x00 0x00
-%byte 0x00 0x00
-%byte 0x00 0x00
-%byte 0x00 0x00
-%byte 0x00 0x00
-%byte 0x00 0x00
 program_2:
-%byte 0x00 0x01
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
+; xor_key = 0x51 0x1e 0x47
+%byte 0x30 0x50 ; xori r0, 0x5
+%byte 0x31 0x10 ; xori r1, 0x1
+%byte 0x32 0x10 ; xori r2, 0x1
+%byte 0x33 0xe0 ; xori r3, 0xe
+%byte 0x34 0x40 ; xori r4, 0x4
+%byte 0x35 0x70 ; xori r5, 0x7
+%byte 0x00 0x61 ; fail r0, r6, 1
+%byte 0x01 0x71 ; fail r1, r7, 1
+%byte 0x02 0x81 ; fail r2, r8, 1
+%byte 0x03 0x91 ; fail r3, r9, 1
+%byte 0x04 0xa1 ; fail r4, r10, 1
+%byte 0x05 0xb1 ; fail r5, r11, 1
+%byte 0x00 0xf0 ; fail r0, r15, 0
+%byte 0x50 0x00 ; rst
 %byte 0x50 0x00
 %byte 0x50 0x00
 program_3:
-%byte 0x00 0x01
+%byte 0x00 0xf0
 %byte 0x50 0x00
 %byte 0x50 0x00
 %byte 0x50 0x00
@@ -438,7 +474,7 @@ program_3:
 %byte 0x50 0x00
 %byte 0x50 0x00
 program_4:
-%byte 0x00 0x01
+%byte 0x00 0xf0
 %byte 0x50 0x00
 %byte 0x50 0x00
 %byte 0x50 0x00
@@ -587,7 +623,7 @@ bbl 0
 
 %pagealign
 program_5:
-%byte 0x00 0x01
+%byte 0x00 0xf0
 %byte 0x50 0x00
 %byte 0x50 0x00
 %byte 0x50 0x00
@@ -604,7 +640,7 @@ program_5:
 %byte 0x50 0x00
 %byte 0x50 0x00
 program_6:
-%byte 0x00 0x01
+%byte 0x00 0xf0
 %byte 0x50 0x00
 %byte 0x50 0x00
 %byte 0x50 0x00
@@ -621,7 +657,7 @@ program_6:
 %byte 0x50 0x00
 %byte 0x50 0x00
 program_7:
-%byte 0x00 0x01
+%byte 0x00 0xf0
 %byte 0x50 0x00
 %byte 0x50 0x00
 %byte 0x50 0x00
@@ -638,7 +674,7 @@ program_7:
 %byte 0x50 0x00
 %byte 0x50 0x00
 program_8:
-%byte 0x00 0x01
+%byte 0x00 0xf0
 %byte 0x50 0x00
 %byte 0x50 0x00
 %byte 0x50 0x00
@@ -788,7 +824,7 @@ bbl 0
 program_1_data:
 %byte 0x66 0x6c 0x61 ; this one is simple: just 'fla'
 program_2_data:
-%byte 0x22 0x22 0x22
+%byte 0x36 0x65 0x2e ; b'g{i' ^ xor_key1
 program_3_data:
 %byte 0x33 0x33 0x33
 program_4_data:
@@ -960,6 +996,35 @@ dispatch_entry_6:  jun handle_opcode_ldm
 dispatch_entry_7:  jun handle_opcode_add
 ; dispatch to the appropriate jump table 
 opcode_dispatch: jin p0
+
+
+; from page 107 of the MCS-4 Assembly Language Programming Manual
+; r0 = r0 ^ r1
+xor:
+fim p1 11
+xor__L1:
+ldm 0
+xch r0
+ral
+xch r0
+inc r3
+xch r3
+jcn a xor__L2
+xch r3
+rar
+xch r2
+ldm 0
+xch r1
+ral
+xch r1
+rar
+add r2
+ral 
+jun xor__L1
+xor__L2:
+bbl 0
+; end xor
+
 
 
 ; ======= DATA TYPES =======
