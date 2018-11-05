@@ -95,3 +95,7 @@ There are 8 programs (one for each chunk) that run on input:
 7: 2, but with rol instead of xor
 
 8: 4, but with rol instead of xor
+
+
+
+actual flag: flag{intl_cpus_scare_me}

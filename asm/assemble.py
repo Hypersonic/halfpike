@@ -217,6 +217,11 @@ class CodeStmt:
                     return 0
                 next_page = (ip & 0xf00) + 0x100
                 return next_page - ip
+            if self.stmt.startswith("nibblealign"):
+                if ip & 0xff0 == ip:
+                    return b""  # already page aligned
+                next_nibble = (ip & 0xff0) + 0x10
+                return next_nibble - ip
         return 0
 
 
@@ -673,6 +678,11 @@ class Parser:
                     return b""  # already page aligned
                 next_page = (ip & 0xf00) + 0x100
                 return b"\x00" * (next_page - ip)
+            if stmt.stmt.startswith("nibblealign"):
+                if ip & 0xff0 == ip:
+                    return b""  # already page aligned
+                next_nibble = (ip & 0xff0) + 0x10
+                return b"\x00" * (next_nibble - ip)
             return b""
 
         self.report_error(

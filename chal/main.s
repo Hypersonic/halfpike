@@ -71,7 +71,7 @@ handle_opcode_add: jun hlt
 ; Load vm register number (stored in acc) into r0
 load_vm_register:
 fim p0 vm_r0
-xch r0
+xch r1
 src p0
 rdm
 xch r0
@@ -80,49 +80,69 @@ bbl 0
 
 
 main:
-; load all programs into memory:
+; load all programs into memory, along with their data:
 ; program 1 (bank 0)
 ldm 0
 dcl
 fim p0 program_1
 jms copy_program_1
+fim p0 program_1_data
+jms load_program_data
 ; program 2 (bank 1)
 ldm 1
 dcl
 fim p0 program_2
 jms copy_program_1
+fim p0 program_2_data
+jms load_program_data
 ; program 3 (bank 2)
 ldm 2
 dcl
 fim p0 program_3
 jms copy_program_1
+fim p0 program_3_data
+jms load_program_data
 ; program 4 (bank 3)
 ldm 3
 dcl
 fim p0 program_4
 jms copy_program_1
+fim p0 program_4_data
+jms load_program_data
 ; program 5 (bank 4)
 ldm 4
 dcl
 fim p0 program_5
 jms copy_program_2
+fim p0 program_5_data
+jms load_program_data
 ; program 6 (bank 5)
 ldm 5
 dcl
 fim p0 program_6
 jms copy_program_2
+fim p0 program_6_data
+jms load_program_data
 ; program 7 (bank 6)
 ldm 6
 dcl
 fim p0 program_7
 jms copy_program_2
+fim p0 program_7_data
+jms load_program_data
 ; program 8 (bank 7)
 ldm 7
 dcl
 fim p0 program_8
 jms copy_program_2
+fim p0 program_8_data
+jms load_program_data
 
-; TODO: load all program registers with flag and data nibbles
+; TODO: load all program registers with flag nibbles
+
+; let them know we're ready to go. then cry a bit? i want to cry a bit.
+fim p0 s_ready_to_go
+jms puts
 
 ; switch back to bank 0
 ldm 0
@@ -286,6 +306,8 @@ ram_memcpy__done:
 bbl 0
 ; end ram_memcpy
 
+
+%pagealign ; XXX: pagealign because we were page-misaligned in the function, this may be removable later
 
 ; check if all states are in the "done" state.
 ; clobbers p0, p1
@@ -713,6 +735,125 @@ copy_program_2__loop_2__end:
 
 bbl 0
 ; end copy_program_2
+
+%pagealign
+program_1_data:
+%byte 0x66 0x6c 0x61 ; this one is simple: just 'fla'
+program_2_data:
+%byte 0x22 0x22 0x22
+program_3_data:
+%byte 0x33 0x33 0x33
+program_4_data:
+%byte 0x44 0x44 0x44
+%nibblealign ; make sure we stay aligned so we don't need to do annoying math
+program_5_data:
+%byte 0x55 0x55 0x55
+program_6_data:
+%byte 0x66 0x66 0x66
+program_7_data:
+%byte 0x77 0x77 0x77
+program_8_data:
+%byte 0x88 0x88 0x88
+
+; load the program data (program_X_data above) starting at p0 into the current
+; bank's program data registers. assume it clobbers shit
+; p0 better be nibble-aligned thx
+load_program_data:
+
+; byte 0:
+fin p1
+; nibble 0
+fim p2 vm_r6
+src p2
+ld r2
+wrm
+; nibble 1
+fim p2 vm_r7
+src p2
+ld r3
+wrm
+; inc
+inc r1
+
+; byte 1:
+fin p1
+; nibble 0
+fim p2 vm_r8
+src p2
+ld r2
+wrm
+; nibble 1
+fim p2 vm_r9
+src p2
+ld r3
+wrm
+; inc
+inc r1
+
+; byte 2:
+fin p1
+; nibble 0
+fim p2 vm_r10
+src p2
+ld r2
+wrm
+; nibble 1
+fim p2 vm_r11
+src p2
+ld r3
+wrm
+
+bbl 0
+; end load_program_data
+
+%pagealign
+; you have basically < 220 bytes or something like that of string data here.
+; idk how long it'll actually be but 36 bytes seems like a reasonable size
+; for this function to end up. i'm writing this comment before i write the function.
+; fuck this stupid architecture's addressing. it is so garbo.
+;
+; because of the garbage way i wrote my assembler capital letters and colons
+; dont work in strings without escaping them. Oops.
+s_ready_to_go:
+%str "welcome, enter the flag\x3a" 
+s_correct_flag:
+%str "correct flag!"
+s_incorrect_flag:
+%str "incorrect flag \x3a("
+
+; put a nul-terminated string to stdout, followed by a newline
+puts:
+
+puts__loop:
+fin p1
+; test if p1 == 0, if so we're done
+ld r2
+jcn na puts__can_print
+ld r3
+jcn a puts__done
+
+puts__can_print:
+ld r2
+wrr
+ld r3
+wrr
+
+; s++
+isz r1 puts__also_inc_r0
+jun puts__after_inc
+puts__also_inc_r0: inc r0
+puts__after_inc:
+
+jun puts__loop
+puts__done:
+; newline
+fim p1 0x0a
+ld r2
+wrr
+ld r3
+wrr
+bbl 0
+; end puts
 
 
 %pagealign

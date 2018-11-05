@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <type_traits>
 #include <unordered_map>
 
@@ -135,6 +136,10 @@ struct Machine_State {
   std::array<uint8_t, 4096> rom{};
   std::array<std::array<uint4_t, 256>, 8> ram_banks{};
   size_t selected_ram_bank{0};
+
+  // buffers while writing and reading with wrr and rdr instructions
+  std::optional<uint4_t> write_hold{std::nullopt};
+  std::optional<uint4_t> read_hold{std::nullopt};
 };
 
 enum class Opcode {
@@ -353,10 +358,20 @@ void dump_machine_state(Machine_State &state) {
   std::cout << "carry: " << std::hex << std::showbase << state.carry_bit
             << ", ";
   std::cout << "acc: " << std::hex << std::showbase << state.acc << ", ";
-  for (size_t i = 0; i < 8; i++) {
-    std::cout << "stop[" << i << "]: " << state.ram_banks.at(i).at(158) << ", ";
-  }
   std::cout << std::endl;
+  for (size_t i = 0; i < 8; i++) {
+    // std::cout << "stop[" << i << "]: " << state.ram_banks.at(i).at(158) << ",
+    // ";
+    std::cout << "state " << std::dec << i << ": "
+              << "stop: " << std::hex << state.ram_banks.at(i).at(158)
+              << ", fail: " << std::hex << state.ram_banks.at(i).at(157) << ", "
+              << "pc: " << std::hex << state.ram_banks.at(i).at(159) << ", ";
+    for (size_t j = 0; j < 16; j++) {
+      std::cout << "r" << std::dec << j << ": " << std::hex
+                << state.ram_banks.at(i).at(160 + j) << ", ";
+    }
+    std::cout << std::endl;
+  }
 }
 
 void set_register_pair(Machine_State &state, uint8_t pair_idx, uint8_t value) {
@@ -521,8 +536,15 @@ void tick(Machine_State &state) {
            }},
           {Opcode::WRR,
            [decode_pc](Machine_State &state) {
-             std::cout << "unimpl: WRR" << std::endl;
-             abort();
+             // this is technically not *quite* what this instruction is
+             // supposed to do, but y'know, gotta get io and this does io.
+             if (state.write_hold.has_value()) {
+               char c = (state.write_hold->get() << 4) | state.acc.get();
+               putchar(c);
+               state.write_hold = std::nullopt;
+             } else {
+               state.write_hold = state.acc;
+             }
            }},
           {Opcode::WPM,
            [decode_pc](Machine_State &state) {
@@ -668,8 +690,8 @@ void tick(Machine_State &state) {
   auto opcode = get_current_opcode(state);
   state.pc += get_opcode_size(opcode);
   opcode_handlers.at(opcode)(state);
-  std::cout << decode_pc << ": " << get_opcode_name(opcode) << std::endl;
-  dump_machine_state(state);
+  // std::cout << decode_pc << ": " << get_opcode_name(opcode) << std::endl;
+  // dump_machine_state(state);
 }
 
 int main(int argc, char **argv) {
