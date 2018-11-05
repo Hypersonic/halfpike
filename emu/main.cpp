@@ -583,8 +583,17 @@ void tick(Machine_State &state) {
            }},
           {Opcode::RDR,
            [decode_pc](Machine_State &state) {
-             std::cout << "unimpl: RDR" << std::endl;
-             abort();
+             // much like WRR, this isn't quite the intended behavior of this
+             // instruction. We're basically using it as a "read a character
+             // from stdin, one nibble at a time" function
+             if (state.read_hold.has_value()) {
+               state.acc = *(state.read_hold);
+               state.read_hold = std::nullopt;
+             } else {
+               uint8_t c = uint8_t(getchar());
+               state.acc = c >> 4;
+               state.read_hold = c & 0xf;
+             }
            }},
           {Opcode::ADM,
            [decode_pc](Machine_State &state) {

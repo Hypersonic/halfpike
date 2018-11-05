@@ -9,7 +9,8 @@ hlt: jun hlt
 
 ;fail r1, r2, imm:
 ;    if r1 == r2:
-;        FAILED ||= imm
+;        if imm == 1:
+;           FAILED ||= imm
 ;        READY_TO_STOP = true
 handle_opcode_fail:
 ; get first reg value
@@ -26,13 +27,19 @@ xch r11
 ld r10
 sub r11
 jcn na handle_opcode_fail__done
-  ; FAILED ||= imm
-  fim p0 vm_failed
-  src p0
-  rdm
-  jcn na handle_opcode_fail__after_or
-  ldm 1
-  wrm
+  ; if imm == 1
+  ld r12
+  jcn a handle_opcode_fail__after_or
+    ; if READY_TO_STOP == 0:
+    fim p0 vm_ready_to_stop
+    src p0
+    rdm
+    jcn na handle_opcode_fail__after_or
+      ; FAILED = imm
+      fim p0 vm_failed
+      src p0
+      ld r12
+      wrm
   handle_opcode_fail__after_or:
   ; READY_TO_STOP = true
   fim p0 vm_ready_to_stop
@@ -80,6 +87,11 @@ bbl 0
 
 
 main:
+; let them know we're ready to go. then cry a bit? i want to cry a bit.
+fim p0 s_ready_to_go
+jms puts
+
+
 ; load all programs into memory, along with their data:
 ; program 1 (bank 0)
 ldm 0
@@ -88,6 +100,7 @@ fim p0 program_1
 jms copy_program_1
 fim p0 program_1_data
 jms load_program_data
+jms load_flag_chunk
 ; program 2 (bank 1)
 ldm 1
 dcl
@@ -95,6 +108,7 @@ fim p0 program_2
 jms copy_program_1
 fim p0 program_2_data
 jms load_program_data
+jms load_flag_chunk
 ; program 3 (bank 2)
 ldm 2
 dcl
@@ -102,6 +116,7 @@ fim p0 program_3
 jms copy_program_1
 fim p0 program_3_data
 jms load_program_data
+jms load_flag_chunk
 ; program 4 (bank 3)
 ldm 3
 dcl
@@ -109,6 +124,7 @@ fim p0 program_4
 jms copy_program_1
 fim p0 program_4_data
 jms load_program_data
+jms load_flag_chunk
 ; program 5 (bank 4)
 ldm 4
 dcl
@@ -116,6 +132,7 @@ fim p0 program_5
 jms copy_program_2
 fim p0 program_5_data
 jms load_program_data
+jms load_flag_chunk
 ; program 6 (bank 5)
 ldm 5
 dcl
@@ -123,6 +140,7 @@ fim p0 program_6
 jms copy_program_2
 fim p0 program_6_data
 jms load_program_data
+jms load_flag_chunk
 ; program 7 (bank 6)
 ldm 6
 dcl
@@ -130,6 +148,7 @@ fim p0 program_7
 jms copy_program_2
 fim p0 program_7_data
 jms load_program_data
+jms load_flag_chunk
 ; program 8 (bank 7)
 ldm 7
 dcl
@@ -137,12 +156,7 @@ fim p0 program_8
 jms copy_program_2
 fim p0 program_8_data
 jms load_program_data
-
-; TODO: load all program registers with flag nibbles
-
-; let them know we're ready to go. then cry a bit? i want to cry a bit.
-fim p0 s_ready_to_go
-jms puts
+jms load_flag_chunk
 
 ; switch back to bank 0
 ldm 0
@@ -217,8 +231,20 @@ jun opcode_dispatch
 ; end swtch
 
 finished:
-; for now, just spin
-; TODO: print a message depending on whether they got it right or wrong
+jms check_all_correct
+jcn na yay_they_got_it
+
+oh_no_they_didnt_get_it:
+fim p0 s_incorrect_flag
+jms puts
+jun hhh
+
+yay_they_got_it:
+fim p0 s_correct_flag
+jms puts
+
+jun hhh
+; we're done. just spin
 hhh: jun hhh
 ; end finished
 
@@ -336,16 +362,38 @@ jcn na all_state_done__loop ; if r3 != 8, loop again
 bbl 1
 ; end all_states_done
 
+; check if all vms have failed = 0. return in acc
+check_all_correct:
+fim p0 0x8_0
+
+check_all_correct__loop:
+  ; switch banks
+  ld r3
+  dcl
+  ; get the failed value for this bank
+  fim p0 vm_failed
+  src p0
+  rdm
+  ; if our acc is 1, it means we've failed this thread. therefore, we can return a 0
+  jcn na check_all_correct__check
+    bbl 0
+  check_all_correct__check:
+  ; advance to the next bank
+  inc r3
+  ld r3
+  sub r2
+jcn na check_all_correct__loop ; if r3 != 8, loop again
+bbl 1
+; end check_all_correct
 
 %pagealign
 program_1:
-%byte 0x00 0x61 ; fail r0, r6, 1
-%byte 0x01 0x71 ; fail r1, r7, 1
-%byte 0x02 0x81 ; fail r2, r8, 1
-%byte 0x03 0x91 ; fail r3, r9, 1
-%byte 0x04 0xa1 ; fail r4, r10, 1
-%byte 0x05 0xb1 ; fail r5, r11, 1
+%byte 0x00 0x01 ; fail r0, r0, 1
 %byte 0x50 0x00 ; rst
+%byte 0x00 0x00
+%byte 0x00 0x00
+%byte 0x00 0x00
+%byte 0x00 0x00
 %byte 0x00 0x00
 %byte 0x00 0x00
 %byte 0x00 0x00
@@ -805,6 +853,44 @@ wrm
 
 bbl 0
 ; end load_program_data
+
+; load a chunk (3 characters) from stdin into the first 6 registers of the
+; current bank's vm
+load_flag_chunk:
+
+; nibble 0:
+rdr
+fim p0 vm_r0
+src p0
+wrm
+; nibble 1:
+rdr
+fim p0 vm_r1
+src p0
+wrm
+; nibble 2:
+rdr
+fim p0 vm_r2
+src p0
+wrm
+; nibble 3:
+rdr
+fim p0 vm_r3
+src p0
+wrm
+; nibble 4:
+rdr
+fim p0 vm_r4
+src p0
+wrm
+; nibble 5:
+rdr
+fim p0 vm_r5
+src p0
+wrm
+
+bbl 0
+; end load_flag_chunk
 
 %pagealign
 ; you have basically < 220 bytes or something like that of string data here.
