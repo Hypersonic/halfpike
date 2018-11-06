@@ -35,16 +35,17 @@ opcodes:
         READY_TO_STOP = true
 1: rol r1, imm
     rol r1, imm
-2: ld r1, imm
-    r1 = imm
+2: ld r1, loc
+    r1 = *loc
 3: xori r1, imm
     r1 ^= imm
 4: stri imm0, r1
     mem[imm0] = r1
 5: rst
     ip = 0
-6: ldm r1, imm0
-    r1 = mem[imm0]
+6: skipifneq r1, r2
+    if r1 != r2:
+        ip++
 7: add r1, rimm0
     r1 += imm0
 
@@ -64,14 +65,17 @@ There are 8 programs (one for each chunk) that run on input:
 
 3: self modifying strcmp loop
     fail r0, r6, 1
-    ldm r12, 1
+    0x6c12 ; ld r12, r1, r2 (used for constants)
+    ld r12, 7
     add r12, 1
     stri 1, r12
-    ldm r12, 2
+    ld r12, 8
     add r12, 1
     stri 2, r12
-    ld, r13, 12
-    bail r12, r13
+    ld r12, 5
+    ld r13, 1
+    skipifneq r12, r13
+    fail r0, r15, 0
     rst
 
 4: self modifying xor cmp loop

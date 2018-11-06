@@ -701,6 +701,17 @@ void tick(Machine_State &state) {
   opcode_handlers.at(opcode)(state);
   // std::cout << decode_pc << ": " << get_opcode_name(opcode) << std::endl;
   // dump_machine_state(state);
+  /*
+  if (state.ram_banks.at(2).at(159) == 0) {
+    std::cout << "Ins: ";
+    for (size_t i = 0; i < 4; i++) {
+      std::cout << std::hex << state.ram_banks.at(2).at(i) << ' ';
+    }
+    std::cout << std::endl;
+    std::cout << decode_pc << ": " << get_opcode_name(opcode) << std::endl;
+    dump_machine_state(state);
+  }
+  */
 }
 
 int main(int argc, char **argv) {

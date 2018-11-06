@@ -52,9 +52,27 @@ jun main_loop
 
 
 ;rol r1, imm
-handle_opcode_rol: jun hlt
+handle_opcode_rol:
+; TODO
+jun hlt
+; end handle_opcode_rol
 
-handle_opcode_ld: jun hlt
+; ld r1, loc
+;   r1 = *loc
+handle_opcode_ld:
+; get the value at loc
+ld r11
+fim p0 bytecode_start
+xch r1
+src p0
+rdm
+; write to the register
+xch r0
+ld r10
+xch r1
+jms store_vm_register
+jun main_loop
+; end handle_opcode_ld
 
 ; xor r1, imm
 handle_opcode_xori: 
@@ -80,7 +98,23 @@ jms store_vm_register
 jun main_loop
 ; end handle_opcode_xori
 
-handle_opcode_stri: jun hlt
+; stri imm0, r1
+;   mem[imm0] = r1
+handle_opcode_stri:
+; get reg value
+ld r11
+jms load_vm_register
+xch r0
+xch r11
+; put it at loc
+fim p0 bytecode_start
+ld r10
+xch r1
+src p0
+ld r11
+wrm
+jun main_loop
+; end handle_opcode_stri
 
 ; rst
 ;  ip = 0
@@ -92,9 +126,49 @@ wrm
 jun main_loop
 ; end handle_opcode_rst
 
-handle_opcode_ldm: jun hlt
 
-handle_opcode_add: jun hlt
+; skipifneq r1, r2
+;  if r1 != r2:
+;      ip++
+handle_opcode_skipifneq:
+; get first reg value
+ld r10
+jms load_vm_register
+xch r0
+xch r10
+; get second reg value
+ld r11
+jms load_vm_register
+xch r0
+xch r11
+; if r1 != r2
+ld r10
+sub r11
+jcn a handle_opcode_skipifneq__after
+  ; ip++
+  fim p0 vm_pc
+  src p0
+  rdm
+  iac
+  wrm
+handle_opcode_skipifneq__after:
+jun main_loop
+; end handle_opcode_skipifneq
+
+
+; add r1, imm0
+;   r1 += imm0
+handle_opcode_add:
+ld r10
+jms load_vm_register
+ld r0
+add r11
+xch r0
+ld r10
+xch r1
+jms store_vm_register
+jun main_loop
+; end handle_opcode_add
 
 
 ; Load vm register number (stored in acc) into r0
@@ -194,8 +268,9 @@ jms load_flag_chunk
 ; switch back to bank 0
 ldm 0
 dcl
+jun main_loop
 
-;fallthru to main_loop
+%pagealign ; finished was on a different page...
 main_loop:
 ; check if we're done
 jms all_states_done
@@ -457,18 +532,19 @@ program_2:
 %byte 0x50 0x00
 %byte 0x50 0x00
 program_3:
-%byte 0x00 0xf0
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
-%byte 0x50 0x00
+%byte 0x00 0x61 ; fail r0, r6, 1
+%byte 0x2c 0x62 ; ld r12, r6, r2 (used for constants)
+%byte 0x2c 0x10 ; ld r12, 1
+%byte 0x7c 0x10 ; add r12, 1
+%byte 0x41 0xc0 ; stri 1, r12
+%byte 0x2c 0x20 ; ld r12, 2
+%byte 0x7c 0x10 ; add r12, 1
+%byte 0x42 0xc0 ; stri 2, r12
+%byte 0x2c 0x60 ; ld r12, 6
+%byte 0x2d 0x10 ; ld r13, 1
+%byte 0x6c 0xd0 ; skipifneq r12, r13
+%byte 0x00 0xf0 ; fail r0, r15, 0
+%byte 0x50 0x00 ; rst
 %byte 0x50 0x00
 %byte 0x50 0x00
 %byte 0x50 0x00
@@ -826,7 +902,7 @@ program_1_data:
 program_2_data:
 %byte 0x36 0x65 0x2e ; b'g{i' ^ xor_key1
 program_3_data:
-%byte 0x33 0x33 0x33
+%byte 0x6e 0x74 0x6c ; b'ntl'
 program_4_data:
 %byte 0x44 0x44 0x44
 %nibblealign ; make sure we stay aligned so we don't need to do annoying math
@@ -992,7 +1068,7 @@ dispatch_entry_2:  jun handle_opcode_ld
 dispatch_entry_3:  jun handle_opcode_xori
 dispatch_entry_4:  jun handle_opcode_stri
 dispatch_entry_5:  jun handle_opcode_rst
-dispatch_entry_6:  jun handle_opcode_ldm
+dispatch_entry_6:  jun handle_opcode_skipifneq
 dispatch_entry_7:  jun handle_opcode_add
 ; dispatch to the appropriate jump table 
 opcode_dispatch: jin p0
@@ -1025,18 +1101,6 @@ xor__L2:
 bbl 0
 ; end xor
 
-
-
-; ======= DATA TYPES =======
-; enum OPCODE
-%let OPCODE_FAIL = 0
-%let OPCODE_ROL = 1
-%let OPCODE_LD = 2
-%let OPCODE_XORI = 3
-%let OPCODE_STRI = 4
-%let OPCODE_RST = 5
-%let OPCODE_LDM = 6
-%let OPCODE_ADD = 7
 
 
 ; ======= MEMORY LAYOUT ======= 
