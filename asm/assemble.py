@@ -518,7 +518,7 @@ class Parser:
             if data > 255:
                 self.report_warning(
                     stmt,
-                    f"data for fim instruction is larger than a page-size, and will be truncated (data = {data})",
+                    f"data for fim instruction is larger than a page-size, and will be truncated (data = 0x{data:x})",
                 )
             data &= 0xff
             return bytes([(op << 4) | (reg << 1), data])

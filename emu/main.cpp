@@ -662,13 +662,19 @@ void tick(Machine_State &state) {
            }},
           {Opcode::TCC,
            [decode_pc](Machine_State &state) {
-             std::cout << "unimpl: TCC" << std::endl;
-             abort();
+             state.acc = state.carry_bit;
+             state.carry_bit = 0;
            }},
           {Opcode::DAC,
            [decode_pc](Machine_State &state) {
-             std::cout << "unimpl: DAC" << std::endl;
-             abort();
+             const auto old_value = state.acc;
+             state.acc--;
+             if ((old_value & 0b1000).get() != 0 &&
+                 (state.acc & 0b1000).get() == 0) {
+               state.carry_bit = 0;
+             } else {
+               state.carry_bit = 1;
+             }
            }},
           {Opcode::TCS,
            [decode_pc](Machine_State &state) {
@@ -699,19 +705,10 @@ void tick(Machine_State &state) {
   auto opcode = get_current_opcode(state);
   state.pc += get_opcode_size(opcode);
   opcode_handlers.at(opcode)(state);
-  // std::cout << decode_pc << ": " << get_opcode_name(opcode) << std::endl;
-  // dump_machine_state(state);
-  /*
-  if (state.ram_banks.at(2).at(159) == 0) {
-    std::cout << "Ins: ";
-    for (size_t i = 0; i < 4; i++) {
-      std::cout << std::hex << state.ram_banks.at(2).at(i) << ' ';
-    }
-    std::cout << std::endl;
-    std::cout << decode_pc << ": " << get_opcode_name(opcode) << std::endl;
-    dump_machine_state(state);
+  if (opcode == Opcode::JUN) {
+    // std::cout << decode_pc << ": " << get_opcode_name(opcode) << std::endl;
+    // dump_machine_state(state);
   }
-  */
 }
 
 int main(int argc, char **argv) {
