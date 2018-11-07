@@ -341,6 +341,7 @@ std::string get_opcode_name(const Opcode opcode) {
   return opcodes.at(opcode);
 }
 
+/*
 void dump_machine_state(Machine_State &state) {
   // std::cout << std::hex << std::showbase;
 
@@ -373,6 +374,7 @@ void dump_machine_state(Machine_State &state) {
     std::cout << std::endl;
   }
 }
+*/
 
 void set_register_pair(Machine_State &state, uint8_t pair_idx, uint8_t value) {
   state.registers[pair_idx * 2] = value >> 4;
@@ -705,10 +707,6 @@ void tick(Machine_State &state) {
   auto opcode = get_current_opcode(state);
   state.pc += get_opcode_size(opcode);
   opcode_handlers.at(opcode)(state);
-  if (opcode == Opcode::JUN) {
-    // std::cout << decode_pc << ": " << get_opcode_name(opcode) << std::endl;
-    // dump_machine_state(state);
-  }
 }
 
 int main(int argc, char **argv) {
