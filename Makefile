@@ -1,3 +1,6 @@
+challenge.zip: emu/emu binja_plugin/__init__.py chal.rom
+	zip challenge.zip emu/emu binja_plugin/__init__.py chal.rom
+
 chal.rom: asm/* chal/*
 	./asm/assemble.py ./chal/main.s ./chal.rom
 
@@ -6,3 +9,6 @@ emu/emu: emu/*.cpp
 
 run: chal.rom emu/emu
 	./emu/emu ./chal.rom
+
+clean:
+	rm emu/emu chal.rom challenge.zip
