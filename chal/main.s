@@ -810,7 +810,7 @@ program_8:
 %byte 0x00 0x00 
 
 ; copy a program, starting at p0 in ROM, into the current bank's bytecode buffer
-; This is valid for programs 1 to 4 (for programs 5 to 8, use copy_program_2)
+; This is valid for programs 5 to 8 (for programs 1 to 4, use copy_program_1)
 ; src = p0
 ; clobbers p0, p1, p2, acc
 ; pseudocode:
@@ -958,7 +958,7 @@ program_8_data:
 %byte 0x97 0x95 0xd7
 
 ; load the program data (program_X_data above) starting at p0 into the current
-; bank's program data registers. assume it clobbers shit
+; bank's program data registers. assume it clobbers any registers
 ; p0 better be nibble-aligned thx
 load_program_data:
 
@@ -1047,12 +1047,9 @@ bbl 0
 ; end load_flag_chunk
 
 %pagealign
-; you have basically < 220 bytes or something like that of string data here.
-; idk how long it'll actually be but 36 bytes seems like a reasonable size
-; for this function to end up. i'm writing this comment before i write the function.
-; fuck this stupid architecture's addressing. it is so garbo.
+; you have basically < 220 bytes or so of string data here.
 ;
-; because of the garbage way i wrote my assembler capital letters and colons
+; because of the way i wrote my assembler, capital letters and colons
 ; dont work in strings without escaping them. Oops.
 s_ready_to_go:
 %str "welcome, enter the flag\x3a" 
@@ -1099,8 +1096,7 @@ bbl 0
 %pagealign
 ; jump to the correct entry in the dispatch table
 ; we can do this without any fancy math on the dispatch table because we're
-; P A G E A L I G N E D which is a magic incantation about how bullshit the
-; addressing on the 4004 is -- because the jin below (`state_dispatch`) is on
+; PAGE ALIGNED -- because the jin below (`state_dispatch`) is on
 ; the same page as us, it dispatches to one of these.
 ; these must all, obviously, be 2-bytes long, preferably juns
 opcode_dispatch_table:
